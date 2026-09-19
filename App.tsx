@@ -175,8 +175,6 @@ export default function App() {
               onEdit={(transaction) => setEditingTransaction(transaction)}
               onDelete={(transaction) => {
                 void (async () => {
-                  const ok = await confirmAsync('Delete transaction?', 'This will reverse the account balance.', 'Delete');
-                  if (!ok) return;
                   try { await removeTransaction(transaction.id); } catch { notify('Couldn’t delete transaction', 'Please try again.'); }
                 })();
               }}
@@ -400,8 +398,6 @@ export default function App() {
             onClose={() => setEditingTransaction(null)}
             onSave={async (input) => { await editTransaction(editingTransaction.id, input); setEditingTransaction(null); }}
             onDelete={async () => {
-              const ok = await confirmAsync('Delete transaction?', 'This will reverse the account balance.', 'Delete');
-              if (!ok) return;
               try { await removeTransaction(editingTransaction.id); setEditingTransaction(null); } catch { notify('Couldn’t delete transaction', 'Please try again.'); }
             }}
           />
@@ -411,8 +407,6 @@ export default function App() {
           setEditingAccount(null);
           setSelectedAccount({ ...editingAccount, name: input.name, type: input.type, icon: input.icon });
         }} onDelete={async () => {
-          const ok = await confirmAsync('Delete account?', 'This account will be permanently removed.', 'Delete');
-          if (!ok) return;
           try { await removeAsset(editingAccount.id); setEditingAccount(null); setSelectedAccount(null); setActiveTab(accountReturnTab); } catch (e) { notify('Can’t delete account', e instanceof Error ? e.message : 'This account is in use.'); }
         }} />}
       </View>
@@ -476,7 +470,7 @@ function AssetsScreen({ assets, month, onAdd, onEdit, onDelete, onExport, onRest
       <View style={styles.managementIcon}><Ionicons name={asset.icon as IconName} size={21} color={colors.teal} /></View><View style={styles.managementCopy}><Text style={styles.managementName}>{asset.name}</Text><Text style={styles.managementDetail}>{asset.type}</Text></View><View style={styles.managementAmount}><Text style={styles.managementValue}>{money(asset.balanceCents)}</Text><Text style={styles.managementHint}>Tap to edit</Text></View>
     </Pressable>)}</View>
     <Text style={styles.activityHint}>Tap an account for details, or press and hold to edit or delete.</Text>
-    {editing !== undefined && <AssetForm asset={editing} onClose={() => setEditing(undefined)} onSave={async (input) => { if (editing) await onEdit(editing.id, input); else await onAdd(input); setEditing(undefined); }} onDelete={editing ? async () => { const ok = await confirmAsync('Delete account?', 'This account will be permanently removed.', 'Delete'); if (!ok) return; try { await onDelete(editing.id); setEditing(undefined); } catch (e) { notify('Can’t delete account', e instanceof Error ? e.message : 'This account is in use.'); } } : undefined} />}
+    {editing !== undefined && <AssetForm asset={editing} onClose={() => setEditing(undefined)} onSave={async (input) => { if (editing) await onEdit(editing.id, input); else await onAdd(input); setEditing(undefined); }} onDelete={editing ? async () => { try { await onDelete(editing.id); setEditing(undefined); } catch (e) { notify('Can’t delete account', e instanceof Error ? e.message : 'This account is in use.'); } } : undefined} />}
   </View>;
 }
 
@@ -541,7 +535,7 @@ function BudgetsScreen({ month, onChangeMonth, budgets, onAdd, onEdit, onDelete 
       <View style={[styles.managementIcon, { backgroundColor: `${budget.color}20` }]}><View style={[styles.budgetDot, { backgroundColor: budget.color, marginRight: 0 }]} /></View><View style={styles.managementCopy}><Text style={styles.managementName}>{budget.name}</Text><Text style={styles.managementDetail}>{budget.category} · {budget.month}</Text><View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${Math.min(budget.spentCents / Math.max(budget.limitCents, 1), 1) * 100}%`, backgroundColor: budget.color }]} /></View></View><View style={styles.managementAmount}><Text style={styles.managementValue}>{money(budget.spentCents)}</Text><Text style={styles.managementHint}>of {money(budget.limitCents)}</Text></View>
     </Pressable>)}</View>
     <Text style={styles.activityHint}>Tap a budget to edit, or press and hold to delete.</Text>
-    {editing !== undefined && <BudgetForm budget={editing} month={month} onClose={() => setEditing(undefined)} onSave={async (input) => { if (editing) await onEdit(editing.id, input); else await onAdd(input); setEditing(undefined); }} onDelete={editing ? async () => { const ok = await confirmAsync('Delete budget?', 'This budget will be permanently removed.', 'Delete'); if (!ok) return; try { await onDelete(editing.id); setEditing(undefined); } catch (e) { notify('Can’t delete budget', e instanceof Error ? e.message : 'This budget is in use.'); } } : undefined} />}
+    {editing !== undefined && <BudgetForm budget={editing} month={month} onClose={() => setEditing(undefined)} onSave={async (input) => { if (editing) await onEdit(editing.id, input); else await onAdd(input); setEditing(undefined); }} onDelete={editing ? async () => { try { await onDelete(editing.id); setEditing(undefined); } catch (e) { notify('Can’t delete budget', e instanceof Error ? e.message : 'This budget is in use.'); } } : undefined} />}
   </View>;
 }
 
