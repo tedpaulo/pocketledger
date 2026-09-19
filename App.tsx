@@ -96,7 +96,11 @@ export default function App() {
     addTag('meta', { name: 'apple-mobile-web-app-capable', content: 'yes' });
     addTag('meta', { name: 'apple-mobile-web-app-title', content: 'Pocket Ledger' });
     addTag('meta', { name: 'theme-color', content: '#5B9BD5' });
+    addTag('meta', { name: 'viewport', content: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no' });
     addTag('link', { rel: 'apple-touch-icon', href: './favicon.ico' });
+    const style = document.createElement('style');
+    style.innerHTML = 'body { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; } input, textarea { -webkit-user-select: auto; user-select: auto; }';
+    document.head.appendChild(style);
     const manifest = {
       name: 'Pocket Ledger',
       short_name: 'Ledger',
