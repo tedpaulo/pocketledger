@@ -390,7 +390,7 @@ export default function App() {
         )}
         {editingTransaction && (
           <TransactionForm
-            type={editingTransaction.category === 'Income' ? 'Income' : editingTransaction.category === 'Transfer' || editingTransaction.category === 'Future you' ? 'Transfer' : editingTransaction.category === 'Savings' ? 'Savings contribution' : 'Expense'}
+            type={editingTransaction.category === 'Income' ? 'Income' : editingTransaction.category === 'Transfer' ? 'Transfer' : editingTransaction.category === 'Savings' ? 'Savings contribution' : 'Expense'}
             transaction={editingTransaction}
             pairedTransaction={transactions.find((transaction) => transaction.id === `${editingTransaction.id}-destination`)}
             assets={assets}
@@ -575,6 +575,24 @@ function ActivityScreen({
   assets: { id: string; name: string }[];
   budgets: { id: string; name: string; category: string; month: string }[];
 }) {
+  const [filter, setFilter] = useState<'All' | 'Income' | 'Expense' | 'Transfer'>('All');
+  const [subFilter, setSubFilter] = useState<'All' | 'Needs' | 'Wants' | 'Savings'>('All');
+  const handleFilterChange = (f: typeof filter) => { setFilter(f); if (f !== 'Expense') setSubFilter('All'); };
+
+  const expenseCategories = ['Needs', 'Wants', 'Savings'];
+  const filtered = transactions.filter((t) => {
+    if (filter === 'All') return true;
+    if (filter === 'Income') return t.category === 'Income';
+    if (filter === 'Transfer') return t.category === 'Transfer';
+    // Expense: everything that isn't Income or Transfer
+    if (filter === 'Expense') {
+      if (t.category === 'Income' || t.category === 'Transfer') return false;
+      if (subFilter === 'All') return true;
+      return t.category === subFilter;
+    }
+    return true;
+  });
+
   return (
     <View>
       <View style={styles.header}>
@@ -585,8 +603,26 @@ function ActivityScreen({
         <Text style={styles.monthLabel}>{monthLabel(month)}</Text>
         <Pressable onPress={() => onChangeMonth(shiftMonth(month, 1))} accessibilityLabel="Next month"><Ionicons name="chevron-forward" size={22} color={colors.ink} /></Pressable>
       </View>
+
+      <View style={styles.filterRow}>
+        {(['All', 'Income', 'Expense', 'Transfer'] as const).map((f) => (
+          <Pressable key={f} style={[styles.filterChip, filter === f && styles.filterChipActive]} onPress={() => handleFilterChange(f)}>
+            <Text style={[styles.filterChipText, filter === f && styles.filterChipTextActive]}>{f}</Text>
+          </Pressable>
+        ))}
+      </View>
+      {filter === 'Expense' && (
+        <View style={styles.filterRow}>
+          {(['All', 'Needs', 'Wants', 'Savings'] as const).map((sf) => (
+            <Pressable key={sf} style={[styles.subFilterChip, subFilter === sf && styles.subFilterChipActive]} onPress={() => setSubFilter(sf)}>
+              <Text style={[styles.subFilterChipText, subFilter === sf && styles.subFilterChipTextActive]}>{sf}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+
       <View style={styles.activityCard}>
-        {transactions.length === 0 ? <EmptyState icon="receipt-outline" title="No transactions this month" detail="Add an expense, income, or transfer to start your activity history." /> : transactions.map((transaction, index) => {
+        {filtered.length === 0 ? <EmptyState icon="receipt-outline" title={filter === 'All' ? 'No transactions this month' : `No ${filter.toLowerCase()} transactions`} detail={filter === 'All' ? 'Add an expense, income, or transfer to start your activity history.' : `No ${filter.toLowerCase()} transactions found for this month.`} /> : filtered.map((transaction, index) => {
           const editTarget = transaction.id.endsWith('-destination')
             ? transactions.find((candidate) => candidate.id === transaction.id.slice(0, -'-destination'.length)) ?? transaction
             : transaction;
@@ -603,7 +639,7 @@ function ActivityScreen({
                 amount={`${transaction.amountCents >= 0 ? '+' : '-'}${money(Math.abs(transaction.amountCents))}`}
                 iconColor={transaction.amountCents >= 0 ? colors.teal : colors.coral}
                 positive={transaction.amountCents >= 0}
-                last={index === transactions.length - 1}
+                last={index === filtered.length - 1}
               />
             </Pressable>
           );
@@ -629,7 +665,7 @@ function TransactionForm({
   const [assetId, setAssetId] = useState(transaction?.assetId ?? assets[0]?.id ?? '');
   const [destinationAssetId, setDestinationAssetId] = useState(pairedTransaction?.assetId ?? assets[1]?.id ?? assets[0]?.id ?? '');
   const [budgetId, setBudgetId] = useState(transaction?.budgetId ?? (type === 'Savings contribution' ? budgets.find((b) => b.category === 'Savings')?.id ?? null : null));
-  const [transferPurpose, setTransferPurpose] = useState(transaction?.category === 'Future you' ? 'Future you' : 'Other');
+
   const [amount, setAmount] = useState(transaction ? String(Math.abs(transaction.amountCents) / 100) : '');
   const [description, setDescription] = useState(transaction?.description ?? (type === 'Savings contribution' ? 'Savings contribution' : ''));
   const [date, setDate] = useState(transaction ? transaction.occurredAt.slice(0, 10) : dateKey(new Date()));
@@ -658,7 +694,8 @@ function TransactionForm({
     setValidationError('');
     setSaving(true);
     try {
-      await onSave({ assetId, destinationAssetId: isTransfer ? destinationAssetId : undefined, budgetId: isExpense || isTransfer ? (budgets.find((b) => b.id === selectedBudgetId && b.month === date.slice(0, 7))?.id ?? null) : null, description: description.trim(), amountCents: Math.round(value * 100) * (isExpense ? -1 : 1), category: isTransfer ? transferPurpose : type === 'Income' ? 'Income' : type === 'Savings contribution' ? 'Savings' : budgets.find((b) => b.id === budgetId)?.category ?? 'Expense', occurredAt: occurredAt.toISOString(), icon: isTransfer ? 'swap-horizontal-outline' : type === 'Income' ? 'arrow-down-outline' : type === 'Savings contribution' ? 'sparkles-outline' : 'cart-outline', isTransfer });
+      const transferBudgetId = isTransfer ? (budgets.find((b) => b.category === 'Savings' && b.month === date.slice(0, 7))?.id ?? null) : null;
+      await onSave({ assetId, destinationAssetId: isTransfer ? destinationAssetId : undefined, budgetId: isTransfer ? transferBudgetId : isExpense ? (budgets.find((b) => b.id === selectedBudgetId && b.month === date.slice(0, 7))?.id ?? null) : null, description: description.trim(), amountCents: Math.round(value * 100) * (isExpense ? -1 : 1), category: isTransfer ? 'Transfer' : type === 'Income' ? 'Income' : type === 'Savings contribution' ? 'Savings' : budgets.find((b) => b.id === budgetId)?.category ?? 'Expense', occurredAt: occurredAt.toISOString(), icon: isTransfer ? 'swap-horizontal-outline' : type === 'Income' ? 'arrow-down-outline' : type === 'Savings contribution' ? 'sparkles-outline' : 'cart-outline', isTransfer });
     } catch (e) { setValidationError(e instanceof Error ? e.message : 'Could not save. Try again.'); } finally { setSaving(false); }
   };
 
@@ -677,7 +714,7 @@ function TransactionForm({
             <Text style={styles.inputLabel}>{isTransfer ? 'FROM ACCOUNT' : 'ACCOUNT'}</Text>
             <ChoiceRow items={assets} value={assetId} onChange={setAssetId} />
             {isTransfer && <><Text style={styles.inputLabel}>TO ACCOUNT</Text><ChoiceRow items={assets} value={destinationAssetId} onChange={setDestinationAssetId} /></>}
-            {isTransfer && <><Text style={styles.inputLabel}>TRANSFER PURPOSE</Text><ChoiceRow items={[{ id: 'Future you', name: 'Future you' }, { id: 'Other', name: 'Other' }]} value={transferPurpose} onChange={setTransferPurpose} /></>}
+
             {isExpense && <><Text style={styles.inputLabel}>BUDGET</Text><ChoiceRow items={budgets} value={budgetId ?? ''} onChange={(value) => setBudgetId(value || null)} /></>}
             <Text style={styles.inputLabel}>DESCRIPTION</Text>
             <TextInput style={styles.textInput} value={description} onChangeText={setDescription} placeholder="What was this for?" placeholderTextColor="#A4AFB3" />
@@ -886,4 +923,13 @@ const styles = StyleSheet.create({
   saveButtonText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
   deleteButton: { alignItems: 'center', justifyContent: 'center', minHeight: 52, marginTop: 12, borderRadius: 15, backgroundColor: `${colors.coral}15` },
   deleteButtonText: { color: colors.coral, fontSize: 15, fontWeight: '700' },
+  filterRow: { flexDirection: 'row', gap: 8, marginBottom: 10, paddingHorizontal: 2 },
+  filterChip: { borderRadius: 20, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.card, paddingHorizontal: 16, paddingVertical: 8 },
+  filterChipActive: { backgroundColor: colors.teal, borderColor: colors.teal },
+  filterChipText: { color: colors.muted, fontSize: 13, fontWeight: '600' },
+  filterChipTextActive: { color: '#FFFFFF' },
+  subFilterChip: { borderRadius: 20, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.card, paddingHorizontal: 14, paddingVertical: 7 },
+  subFilterChipActive: { backgroundColor: colors.tealSoft, borderColor: '#A3C4E0' },
+  subFilterChipText: { color: colors.muted, fontSize: 12, fontWeight: '600' },
+  subFilterChipTextActive: { color: colors.teal },
 });
