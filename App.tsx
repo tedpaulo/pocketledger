@@ -621,7 +621,7 @@ function ActivityScreen({
 }
 
 function TransactionForm({
-  type, transaction, pairedTransaction, assets, budgets, onClose, onSave,
+  type, transaction, pairedTransaction, assets, budgets, onClose, onSave, onDelete
 }: {
   type: EntryType;
   transaction?: Transaction;
