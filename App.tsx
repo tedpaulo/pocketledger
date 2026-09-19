@@ -84,6 +84,7 @@ export default function App() {
   const [editingAccount, setEditingAccount] = useState<Asset | null>(null);
   const [selectedAccount, setSelectedAccount] = useState<Asset | null>(null);
   const [accountReturnTab, setAccountReturnTab] = useState<Tab>('Accounts');
+  
   useEffect(() => {
     // PWA support on web: so Safari's "Add to Home Screen" opens Pocket Ledger
     // as a standalone app with its own icon.
@@ -398,12 +399,21 @@ export default function App() {
             budgets={budgets}
             onClose={() => setEditingTransaction(null)}
             onSave={async (input) => { await editTransaction(editingTransaction.id, input); setEditingTransaction(null); }}
+            onDelete={async () => {
+              const ok = await confirmAsync('Delete transaction?', 'This will reverse the account balance.', 'Delete');
+              if (!ok) return;
+              try { await removeTransaction(editingTransaction.id); setEditingTransaction(null); } catch { notify('Couldn’t delete transaction', 'Please try again.'); }
+            }}
           />
         )}
         {editingAccount && <AssetForm asset={editingAccount} onClose={() => setEditingAccount(null)} onSave={async (input) => {
           await editAsset(editingAccount.id, input);
           setEditingAccount(null);
           setSelectedAccount({ ...editingAccount, name: input.name, type: input.type, icon: input.icon });
+        }} onDelete={async () => {
+          const ok = await confirmAsync('Delete account?', 'This account will be permanently removed.', 'Delete');
+          if (!ok) return;
+          try { await removeAsset(editingAccount.id); setEditingAccount(null); setSelectedAccount(null); setActiveTab(accountReturnTab); } catch (e) { notify('Can’t delete account', e instanceof Error ? e.message : 'This account is in use.'); }
         }} />}
       </View>
 
@@ -466,7 +476,7 @@ function AssetsScreen({ assets, month, onAdd, onEdit, onDelete, onExport, onRest
       <View style={styles.managementIcon}><Ionicons name={asset.icon as IconName} size={21} color={colors.teal} /></View><View style={styles.managementCopy}><Text style={styles.managementName}>{asset.name}</Text><Text style={styles.managementDetail}>{asset.type}</Text></View><View style={styles.managementAmount}><Text style={styles.managementValue}>{money(asset.balanceCents)}</Text><Text style={styles.managementHint}>Tap to edit</Text></View>
     </Pressable>)}</View>
     <Text style={styles.activityHint}>Tap an account for details, or press and hold to edit or delete.</Text>
-    {editing !== undefined && <AssetForm asset={editing} onClose={() => setEditing(undefined)} onSave={async (input) => { if (editing) await onEdit(editing.id, input); else await onAdd(input); setEditing(undefined); }} />}
+    {editing !== undefined && <AssetForm asset={editing} onClose={() => setEditing(undefined)} onSave={async (input) => { if (editing) await onEdit(editing.id, input); else await onAdd(input); setEditing(undefined); }} onDelete={editing ? async () => { const ok = await confirmAsync('Delete account?', 'This account will be permanently removed.', 'Delete'); if (!ok) return; try { await onDelete(editing.id); setEditing(undefined); } catch (e) { notify('Can’t delete account', e instanceof Error ? e.message : 'This account is in use.'); } } : undefined} />}
   </View>;
 }
 
@@ -531,25 +541,25 @@ function BudgetsScreen({ month, onChangeMonth, budgets, onAdd, onEdit, onDelete 
       <View style={[styles.managementIcon, { backgroundColor: `${budget.color}20` }]}><View style={[styles.budgetDot, { backgroundColor: budget.color, marginRight: 0 }]} /></View><View style={styles.managementCopy}><Text style={styles.managementName}>{budget.name}</Text><Text style={styles.managementDetail}>{budget.category} · {budget.month}</Text><View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${Math.min(budget.spentCents / Math.max(budget.limitCents, 1), 1) * 100}%`, backgroundColor: budget.color }]} /></View></View><View style={styles.managementAmount}><Text style={styles.managementValue}>{money(budget.spentCents)}</Text><Text style={styles.managementHint}>of {money(budget.limitCents)}</Text></View>
     </Pressable>)}</View>
     <Text style={styles.activityHint}>Tap a budget to edit, or press and hold to delete.</Text>
-    {editing !== undefined && <BudgetForm budget={editing} month={month} onClose={() => setEditing(undefined)} onSave={async (input) => { if (editing) await onEdit(editing.id, input); else await onAdd(input); setEditing(undefined); }} />}
+    {editing !== undefined && <BudgetForm budget={editing} month={month} onClose={() => setEditing(undefined)} onSave={async (input) => { if (editing) await onEdit(editing.id, input); else await onAdd(input); setEditing(undefined); }} onDelete={editing ? async () => { const ok = await confirmAsync('Delete budget?', 'This budget will be permanently removed.', 'Delete'); if (!ok) return; try { await onDelete(editing.id); setEditing(undefined); } catch (e) { notify('Can’t delete budget', e instanceof Error ? e.message : 'This budget is in use.'); } } : undefined} />}
   </View>;
 }
 
-function AssetForm({ asset, onClose, onSave }: { asset: Asset | null; onClose: () => void; onSave: (input: AssetInput) => Promise<void> }) {
+function AssetForm({ asset, onClose, onSave, onDelete }: { asset: Asset | null; onClose: () => void; onSave: (input: AssetInput) => Promise<void>; onDelete?: () => Promise<void> }) {
   const [name, setName] = useState(asset?.name ?? ''); const [type, setType] = useState(asset?.type ?? 'Bank account'); const [balance, setBalance] = useState(asset ? String((asset.initialBalanceCents ?? 0) / 100) : ''); const [icon, setIcon] = useState<IconName>((asset?.icon as IconName) ?? 'wallet-outline'); const [error, setError] = useState(''); const [saving, setSaving] = useState(false);
   const save = async () => { const value = Number(balance.replace(',', '.')); if (!name.trim()) return setError('Add an account name.'); if (!type.trim()) return setError('Add an account type.'); if (!Number.isFinite(value)) return setError('Enter a valid opening balance.'); setSaving(true); try { await onSave({ name, type, icon, balanceCents: Math.round(value * 100) }); } catch { setSaving(false); Alert.alert('Couldn’t save account', 'Please try again.'); } };
-  return <SimpleForm title={asset ? 'Edit account' : 'Add account'} onClose={onClose}><Field label="NAME" value={name} onChangeText={setName} placeholder="e.g. Main checking" /><Field label="TYPE" value={type} onChangeText={setType} placeholder="Bank account, e-wallet…" /><Text style={styles.inputLabel}>ACCOUNT ICON</Text><View style={styles.iconPicker}>{accountIconOptions.map((option) => <Pressable key={option.name} accessibilityLabel={`Use ${option.label} icon`} onPress={() => setIcon(option.name)} style={[styles.iconChoice, option.name === icon && styles.iconChoiceSelected]}><Ionicons name={option.name} size={20} color={option.name === icon ? colors.teal : colors.muted} /><Text style={[styles.iconChoiceLabel, option.name === icon && styles.iconChoiceLabelSelected]}>{option.label}</Text></Pressable>)}</View><Field label="OPENING BALANCE" value={balance} onChangeText={setBalance} placeholder="0.00" keyboardType="decimal-pad" />{!!error && <Text style={styles.validationError}>{error}</Text>}<Pressable style={[styles.saveButton, saving && styles.saveButtonDisabled]} onPress={save} disabled={saving}>{saving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveButtonText}>{asset ? 'Save account' : 'Add account'}</Text>}</Pressable></SimpleForm>;
+  return <SimpleForm title={asset ? 'Edit account' : 'Add account'} onClose={onClose}><Field label="NAME" value={name} onChangeText={setName} placeholder="e.g. Main checking" /><Field label="TYPE" value={type} onChangeText={setType} placeholder="Bank account, e-wallet…" /><Text style={styles.inputLabel}>ACCOUNT ICON</Text><View style={styles.iconPicker}>{accountIconOptions.map((option) => <Pressable key={option.name} accessibilityLabel={`Use ${option.label} icon`} onPress={() => setIcon(option.name)} style={[styles.iconChoice, option.name === icon && styles.iconChoiceSelected]}><Ionicons name={option.name} size={20} color={option.name === icon ? colors.teal : colors.muted} /><Text style={[styles.iconChoiceLabel, option.name === icon && styles.iconChoiceLabelSelected]}>{option.label}</Text></Pressable>)}</View><Field label="OPENING BALANCE" value={balance} onChangeText={setBalance} placeholder="0.00" keyboardType="decimal-pad" />{!!error && <Text style={styles.validationError}>{error}</Text>}<Pressable style={[styles.saveButton, saving && styles.saveButtonDisabled]} onPress={save} disabled={saving}>{saving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveButtonText}>{asset ? 'Save account' : 'Add account'}</Text>}</Pressable>{asset && onDelete && <Pressable style={styles.deleteButton} onPress={onDelete} disabled={saving}><Text style={styles.deleteButtonText}>Delete account</Text></Pressable>}</SimpleForm>;
 }
 
 function EmptyState({ icon, title, detail, actionLabel, onAction }: { icon: IconName; title: string; detail: string; actionLabel?: string; onAction?: () => void }) {
   return <View style={styles.emptyState}><View style={styles.emptyStateIcon}><Ionicons name={icon} size={24} color={colors.teal} /></View><Text style={styles.emptyStateTitle}>{title}</Text><Text style={styles.emptyStateDetail}>{detail}</Text>{actionLabel && onAction && <Pressable style={styles.emptyStateButton} onPress={onAction}><Ionicons name="add" size={16} color="#FFF" /><Text style={styles.emptyStateButtonText}>{actionLabel}</Text></Pressable>}</View>;
 }
 
-function BudgetForm({ budget, month, onClose, onSave }: { budget: Budget | null; month: string; onClose: () => void; onSave: (input: BudgetInput) => Promise<void> }) {
+function BudgetForm({ budget, month, onClose, onSave, onDelete }: { budget: Budget | null; month: string; onClose: () => void; onSave: (input: BudgetInput) => Promise<void>; onDelete?: () => Promise<void> }) {
   const initialCategory = budgetCategories.includes(budget?.category as BudgetCategory) ? budget?.category as BudgetCategory : 'Needs';
   const [name, setName] = useState(budget?.name ?? ''); const [category, setCategory] = useState<BudgetCategory>(initialCategory); const [limit, setLimit] = useState(budget ? String(budget.limitCents / 100) : ''); const [error, setError] = useState(''); const [saving, setSaving] = useState(false);
   const save = async () => { const value = Number(limit.replace(',', '.')); if (!name.trim()) return setError('Add a budget name.'); if (!budgetCategories.includes(category)) return setError('Choose a budget category.'); if (!Number.isFinite(value) || value <= 0) return setError('Enter a limit greater than zero.'); setSaving(true); try { await onSave({ name, category, limitCents: Math.round(value * 100), color: budget?.color ?? colors.teal, month: budget?.month ?? month }); } catch { setSaving(false); Alert.alert('Couldn’t save budget', 'Please try again.'); } };
-  return <SimpleForm title={budget ? 'Edit budget' : 'Add budget'} onClose={onClose}><Field label="NAME" value={name} onChangeText={setName} placeholder="e.g. Groceries" /><Text style={styles.inputLabel}>CATEGORY</Text><ChoiceRow items={budgetCategories.map((item) => ({ id: item, name: item }))} value={category} onChange={(value) => setCategory(value as BudgetCategory)} /><Field label="MONTHLY LIMIT" value={limit} onChangeText={setLimit} placeholder="0.00" keyboardType="decimal-pad" />{!!error && <Text style={styles.validationError}>{error}</Text>}<Pressable style={[styles.saveButton, saving && styles.saveButtonDisabled]} onPress={save} disabled={saving}>{saving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveButtonText}>{budget ? 'Save budget' : 'Add budget'}</Text>}</Pressable></SimpleForm>;
+  return <SimpleForm title={budget ? 'Edit budget' : 'Add budget'} onClose={onClose}><Field label="NAME" value={name} onChangeText={setName} placeholder="e.g. Groceries" /><Text style={styles.inputLabel}>CATEGORY</Text><ChoiceRow items={budgetCategories.map((item) => ({ id: item, name: item }))} value={category} onChange={(value) => setCategory(value as BudgetCategory)} /><Field label="MONTHLY LIMIT" value={limit} onChangeText={setLimit} placeholder="0.00" keyboardType="decimal-pad" />{!!error && <Text style={styles.validationError}>{error}</Text>}<Pressable style={[styles.saveButton, saving && styles.saveButtonDisabled]} onPress={save} disabled={saving}>{saving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveButtonText}>{budget ? 'Save budget' : 'Add budget'}</Text>}</Pressable>{budget && onDelete && <Pressable style={styles.deleteButton} onPress={onDelete} disabled={saving}><Text style={styles.deleteButtonText}>Delete budget</Text></Pressable>}</SimpleForm>;
 }
 
 function Field({ label, ...props }: { label: string; value: string; onChangeText: (value: string) => void; placeholder: string; keyboardType?: 'default' | 'decimal-pad' }) {
@@ -620,6 +630,7 @@ function TransactionForm({
   budgets: { id: string; name: string; category: string; month: string }[];
   onClose: () => void;
   onSave: (input: NewTransaction) => Promise<void>;
+  onDelete?: () => Promise<void>;
 }) {
   const [assetId, setAssetId] = useState(transaction?.assetId ?? assets[0]?.id ?? '');
   const [destinationAssetId, setDestinationAssetId] = useState(pairedTransaction?.assetId ?? assets[1]?.id ?? assets[0]?.id ?? '');
@@ -682,6 +693,11 @@ function TransactionForm({
             <Pressable style={[styles.saveButton, saving && styles.saveButtonDisabled]} onPress={save} disabled={saving}>
               {saving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveButtonText}>Save transaction</Text>}
             </Pressable>
+            {transaction && onDelete && (
+              <Pressable style={styles.deleteButton} onPress={onDelete} disabled={saving}>
+                <Text style={styles.deleteButtonText}>Delete transaction</Text>
+              </Pressable>
+            )}
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
@@ -874,4 +890,6 @@ const styles = StyleSheet.create({
   saveButton: { backgroundColor: colors.teal, borderRadius: 15, alignItems: 'center', justifyContent: 'center', minHeight: 52, marginTop: 22 },
   saveButtonDisabled: { opacity: 0.65 },
   saveButtonText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
+  deleteButton: { alignItems: 'center', justifyContent: 'center', minHeight: 52, marginTop: 12, borderRadius: 15, backgroundColor: `${colors.coral}15` },
+  deleteButtonText: { color: colors.coral, fontSize: 15, fontWeight: '700' },
 });
