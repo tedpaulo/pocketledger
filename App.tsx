@@ -25,7 +25,7 @@ import { pickBackupFile, replaceAllData } from './src/services/restore';
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 type Tab = 'Home' | 'Activity' | 'Budgets' | 'Accounts';
 type EntryType = 'Expense' | 'Income' | 'Transfer' | 'Savings contribution';
-const budgetCategories = ['Needs', 'Wants', 'Savings'] as const;
+const budgetCategories = ['Needs', 'Wants', 'Savings', 'Investment'] as const;
 type BudgetCategory = typeof budgetCategories[number];
 const notify = (title: string, message?: string) => Alert.alert(title, message ?? '');
 const confirmAsync = (title: string, message?: string, confirmLabel?: string) => new Promise<boolean>((resolve) => { Alert.alert(title, message ?? '', [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) }, { text: confirmLabel ?? 'OK', onPress: () => resolve(true) }]); });
@@ -576,10 +576,10 @@ function ActivityScreen({
   budgets: { id: string; name: string; category: string; month: string }[];
 }) {
   const [filter, setFilter] = useState<'All' | 'Income' | 'Expense' | 'Transfer'>('All');
-  const [subFilter, setSubFilter] = useState<'All' | 'Needs' | 'Wants' | 'Savings'>('All');
+  const [subFilter, setSubFilter] = useState<'All' | 'Needs' | 'Wants' | 'Investment'>('All');
   const handleFilterChange = (f: typeof filter) => { setFilter(f); if (f !== 'Expense') setSubFilter('All'); };
 
-  const expenseCategories = ['Needs', 'Wants', 'Savings'];
+  const expenseCategories = ['Needs', 'Wants', 'Investment'];
   const filtered = transactions.filter((t) => {
     if (filter === 'All') return true;
     if (filter === 'Income') return t.category === 'Income';
@@ -613,7 +613,7 @@ function ActivityScreen({
       </View>
       {filter === 'Expense' && (
         <View style={styles.filterRow}>
-          {(['All', 'Needs', 'Wants', 'Savings'] as const).map((sf) => (
+          {(['All', 'Needs', 'Wants', 'Investment'] as const).map((sf) => (
             <Pressable key={sf} style={[styles.subFilterChip, subFilter === sf && styles.subFilterChipActive]} onPress={() => setSubFilter(sf)}>
               <Text style={[styles.subFilterChipText, subFilter === sf && styles.subFilterChipTextActive]}>{sf}</Text>
             </Pressable>
